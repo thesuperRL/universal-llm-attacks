@@ -39,11 +39,20 @@ def compute_loss_single(input_ids, labels, model, grad = True):
         )
     return out.loss.item()
 
-def compute_loss_avg(query_targets, model, grad = True):
+# run gradient descent on the same suffix for all queries
+def accumulate_suffix_grads(query_targets, model):
+    total_grad = 0
     losses = []
+
     for item in query_targets:
-        losses.append(compute_loss_single(item["input_ids"], item["labels"], model, grad))
-    return sum(losses) / len(losses), losses
+        loss, suffix_grad = compute_loss_with_suffix_grad(item, model)
+        losses.append(loss)
+
+        total_grad += suffix_grad
+
+    total_gradients = total_grad / len(query_targets)
+    avg_loss = sum(losses) / len(losses)
+    return avg_loss, total_gradients, losses
 
 def compute_loss_with_suffix_grad(item, model):
     device = next(model.parameters()).device
