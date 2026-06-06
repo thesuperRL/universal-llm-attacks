@@ -39,21 +39,6 @@ def compute_loss_single(input_ids, labels, model, grad = True):
         )
     return out.loss.item()
 
-# run gradient descent on the same suffix for all queries
-def accumulate_suffix_grads(query_targets, model):
-    total_grad = 0
-    losses = []
-
-    for item in query_targets:
-        loss, suffix_grad = compute_loss_with_suffix_grad(item, model)
-        losses.append(loss)
-
-        total_grad += suffix_grad
-
-    total_gradients = total_grad / len(query_targets)
-    avg_loss = sum(losses) / len(losses)
-    return avg_loss, total_gradients, losses
-
 def compute_loss_with_suffix_grad(item, model):
     device = next(model.parameters()).device
     embed_layer = model.get_input_embeddings()
@@ -84,3 +69,30 @@ def compute_loss_with_suffix_grad(item, model):
     model.zero_grad(set_to_none=True)
 
     return out.loss.item(), suffix_grad.squeeze(0)
+
+# run gradient descent on the same suffix for all queries
+def accumulate_suffix_grads(query_targets, model):
+    total_grad = 0
+    losses = []
+
+    for item in query_targets:
+        loss, suffix_grad = compute_loss_with_suffix_grad(item, model)
+        losses.append(loss)
+
+        total_grad += suffix_grad
+
+    total_gradients = total_grad / len(query_targets)
+    avg_loss = sum(losses) / len(losses)
+    return avg_loss, total_gradients, losses
+
+def get_token_candidates_from_suffix_grad(suffix_grad, embed_layer, topk=256):
+    WEIGHTS = embed_layer.weight.detach() 
+    candidates = []
+
+    for slot in range(suffix_grad.shape[0]):
+        # matrix multiplication of weights and suffix gradient
+        scores = WEIGHTS @ suffix_grad[slot]
+        top_ids = scores.topk(topk).indices.tolist()
+        candidates.append(top_ids)
+
+    return candidates
